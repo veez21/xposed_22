@@ -316,7 +316,7 @@ mkdir -p $MODPATH
 ui_print "- Copying files"
 cp -af $INSTALLER/$ARCH/system $MODPATH/system
 mkdir -p $MODPATH/system/framework
-cp -af $INSTALLER/common/XposedBridge.jar $MODPATH/system/XposedBridge.jar
+cp -af $INSTALLER/common/XposedBridge.jar $MODPATH/system/framework/XposedBridge.jar
 
 # Handle replace folders
 for TARGET in $REPLACE; do
