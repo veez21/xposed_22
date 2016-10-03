@@ -23,6 +23,20 @@ grep_prop() {
   cat $FILES 2>/dev/null | sed -n $REGEX | head -n 1
 }
 
+android_version() {
+  case $1 in
+    15) echo '4.0 / SDK'$1;;
+    16) echo '4.1 / SDK'$1;;
+    17) echo '4.2 / SDK'$1;;
+    18) echo '4.3 / SDK'$1;;
+    19) echo '4.4 / SDK'$1;;
+    21) echo '5.0 / SDK'$1;;
+    22) echo '5.1 / SDK'$1;;
+    23) echo '6.0 / SDK'$1;;
+    *)  echo 'SDK'$1;;
+  esac
+}
+
 is_mounted() {
   if [ ! -z "$2" ]; then
     cat /proc/mounts | grep $1 | grep $2, >/dev/null
@@ -174,10 +188,11 @@ fi
 
 INSTALLER=$TMPDIR/$MODID
 MODPATH=$MOUNTPATH/$MODID
+HELPERPATH=$MODPATH/$HELPERID
 
 mkdir -p $INSTALLER
 cd $INSTALLER
-unzip -o $ZIP common/* module.prop
+unzip -o $ZIP
 
 ##########################################################################################
 # Main
@@ -208,11 +223,42 @@ ABI2=$(grep_prop ro.product.cpu.abi2 | cut -c-3)
 ABILONG=$(grep_prop ro.product.cpu.abi)
 
 ARCH=arm
-IS64BIT=
+IS64BIT=false
 if [ "$ABI" = "x86" ]; then ARCH=x86; fi;
 if [ "$ABI2" = "x86" ]; then ARCH=x86; fi;
-if [ "$ABILONG" = "arm64-v8a" ]; then ARCH=arm64; IS64BIT=1; fi;
-if [ "$ABILONG" = "x86_64" ]; then ARCH=x64; IS64BIT=1; fi;
+if [ "$ABILONG" = "arm64-v8a" ]; then ARCH=arm64; IS64BIT=true; fi;
+if [ "$ABILONG" = "x86_64" ]; then ARCH=x64; IS64BIT=true; fi;
+
+XVERSION=$(grep_prop version $ARCH/system/xposed.prop)
+XMINSDK=$(grep_prop minsdk $ARCH/system/xposed.prop)
+XMAXSDK=$(grep_prop maxsdk $ARCH/system/xposed.prop)
+
+XEXPECTEDSDK=$(android_version $XMINSDK)
+if [ "$XMINSDK" != "$XMAXSDK" ]; then
+  XEXPECTEDSDK=$XEXPECTEDSDK' - '$(android_version $XMAXSDK)
+fi
+
+ui_print "- Xposed version: $XVERSION"
+ui_print "- Device platform: $ARCH"
+
+XVALID=
+if [ "$API" -ge "$XMINSDK" ]; then
+  if [ "$API" -le "$XMAXSDK" ]; then
+    XVALID=1
+  else
+    ui_print "! Wrong Android version: $APINAME"
+    ui_print "! This file is for: $XEXPECTEDSDK"
+  fi
+else
+  ui_print "! Wrong Android version: $APINAME"
+  ui_print "! This file is for: $XEXPECTEDSDK"
+fi
+
+if [ -z $XVALID ]; then
+  ui_print "! Please download the correct package"
+  ui_print "! for your Android version!"
+  exit 1
+fi
 
 # You can get the Android API version from $API, the CPU architecture from $ARCH
 # Useful if you are creating Android version / platform dependent mods
@@ -239,7 +285,7 @@ if (! $CACHEMOD); then
     ui_print " "
   fi
 
-  payload_size_check "$ZIP" "*"
+  payload_size_check "$ZIP" "$ARCH/*"
 
   if [ -f "$IMG" ]; then
     ui_print "- $IMG detected!"
@@ -268,7 +314,9 @@ mkdir -p $MODPATH
 
 # Copy files
 ui_print "- Copying files"
-unzip -o $ZIP system/* -d $MODPATH
+cp -af $INSTALLER/$ARCH/system $MODPATH/system
+mkdir -p $MODPATH/system/framework
+cp -af $INSTALLER/common/XposedBridge.jar $MODPATH/system/XposedBridge.jar
 
 # Handle replace folders
 for TARGET in $REPLACE; do
@@ -305,6 +353,25 @@ fi
 
 ui_print "- Setting permissions"
 set_permissions
+
+# Android 5.1 dirty workaround
+if [ "$API" -eq "22" ]; then
+  ui_print "- Android 5.1 workaround"
+  find /system -type f -name '*.odex*' 2>/dev/null | while read ODEX; do
+    # Replace the folder
+    mktouch $HELPERPATH${ODEX%/*}/.replace
+    # Create a dummy for renaming
+    mktouch "$HELPERPATH$ODEX".xposed
+  done
+  find /system/framework -type f -name 'boot.*' 2>/dev/null | while read BOOT; do
+    mktouch $HELPERPATH$BOOT
+  done
+  # Enable auto_mount
+  touch $HELPERPATH/auto_mount
+  cp -af $INSTALLER/common/helper.sh $HELPERPATH/post-fs-data.sh
+  cp -af $INSTALLER/common/helper.prop $HELPERPATH/module.prop
+  set_perm_recursive  $HELPERPATH  0  0  0755  0644
+fi
 
 ui_print "- Unmounting partitions"
 
