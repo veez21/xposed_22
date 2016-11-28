@@ -1,3 +1,8 @@
-v86.6 (Systemless by topjohnwu)
-    - Support Magisk v7 new repo system
-    - Support Chainfire's suhide to use Safety Net (AP/PoGO)
+v87.0 (Systemless by topjohnwu)
+    - Include fix from rovo89 to
+      prevent bootloops in the 
+      latest security patch
+    - Android 5.1 (SDK 22) was 
+      broken after one Magisk 
+      upgrade, it's now Magisk
+      version independent

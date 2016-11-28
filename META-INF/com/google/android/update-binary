@@ -162,13 +162,11 @@ fi
 TMPDIR=/tmp
 MOUNTPATH=/magisk
 IMGNAME=magisk.img
-CACHEPATH=/cache/magisk
 
 if ($BOOTMODE); then
   TMPDIR=/dev/tmp
   MOUNTPATH=/dev/magisk_merge
   IMGNAME=magisk_merge.img
-  CACHEPATH=/cache/magisk_merge
 fi
 
 mkdir -p $TMPDIR 2>/dev/null
@@ -182,13 +180,9 @@ fi
 
 source config.sh
 
-if ($CACHEMOD); then
-  MOUNTPATH=$CACHEPATH
-fi
-
 INSTALLER=$TMPDIR/$MODID
 MODPATH=$MOUNTPATH/$MODID
-HELPERPATH=$MODPATH/$HELPERID
+HELPERPATH=$MOUNTPATH/$HELPERID
 
 mkdir -p $INSTALLER
 cd $INSTALLER
@@ -263,49 +257,47 @@ fi
 # You can get the Android API version from $API, the CPU architecture from $ARCH
 # Useful if you are creating Android version / platform dependent mods
 
-if (! $CACHEMOD); then
-  IMG=
-  if (is_mounted /data); then
-    IMG=/data/$IMGNAME
-    if [ ! -f "/data/magisk.img" ]; then
-      ui_print "! Magisk is not installed!"
-      ui_print "! Magisk is required for this mod!"
-      exit 1
-    fi
-  else
-    IMG=/cache/magisk.img
-    ui_print " "
-    ui_print "***********************************"
-    ui_print "*      !! Data unavalible !!      *"
-    ui_print "* Magisk detection is impossible  *"
-    ui_print "* Installation will still proceed *"
-    ui_print "*  But please make sure you have  *"
-    ui_print "*        Magisk installed!!       *"
-    ui_print "***********************************"
-    ui_print " "
-  fi
-
-  payload_size_check "$ZIP" "$ARCH/*"
-
-  if [ -f "$IMG" ]; then
-    ui_print "- $IMG detected!"
-    target_size_check $IMG
-    if [ "$reqSizeM" -gt "$curFreeM" ]; then
-      SIZE=$((((reqSizeM + curUsedM) / 32 + 2) * 32))
-      ui_print "- Resizing $IMG to ${SIZE}M..."
-      resize2fs $IMG ${SIZE}M
-    fi
-  else
-    SIZE=$(((reqSizeM / 32 + 2) * 32));
-    ui_print "- Creating $IMG with size ${SIZE}M"
-    make_ext4fs -l ${SIZE}M -a /magisk -S $INSTALLER/common/file_contexts_image $IMG
-  fi
-
-  mount_image $IMG $MOUNTPATH
-  if (! is_mounted $MOUNTPATH); then
-    ui_print "! $IMG mount failed... abort"
+IMG=
+if (is_mounted /data); then
+  IMG=/data/$IMGNAME
+  if [ ! -f "/data/magisk.img" ]; then
+    ui_print "! Magisk is not installed!"
+    ui_print "! Magisk is required for this mod!"
     exit 1
   fi
+else
+  IMG=/cache/magisk.img
+  ui_print " "
+  ui_print "***********************************"
+  ui_print "*      !! Data unavailible !!     *"
+  ui_print "* Magisk detection is impossible  *"
+  ui_print "* Installation will still proceed *"
+  ui_print "*  But please make sure you have  *"
+  ui_print "*        Magisk installed!!       *"
+  ui_print "***********************************"
+  ui_print " "
+fi
+
+payload_size_check "$ZIP" "$ARCH/*"
+
+if [ -f "$IMG" ]; then
+  ui_print "- $IMG detected!"
+  target_size_check $IMG
+  if [ "$reqSizeM" -gt "$curFreeM" ]; then
+    SIZE=$((((reqSizeM + curUsedM) / 32 + 2) * 32))
+    ui_print "- Resizing $IMG to ${SIZE}M..."
+    resize2fs $IMG ${SIZE}M
+  fi
+else
+  SIZE=$(((reqSizeM / 32 + 2) * 32));
+  ui_print "- Creating $IMG with size ${SIZE}M"
+  make_ext4fs -l ${SIZE}M -a /magisk -S $INSTALLER/common/file_contexts_image $IMG
+fi
+
+mount_image $IMG $MOUNTPATH
+if (! is_mounted $MOUNTPATH); then
+  ui_print "! $IMG mount failed... abort"
+  exit 1
 fi
 
 # Create mod paths
@@ -336,18 +328,13 @@ if ($BOOTMODE); then
   cp -af $INSTALLER/module.prop /magisk/$MODID/module.prop
 fi
 
-# post-fs mode scripts
-if ($CACHEMOD) && ($POSTFS); then
-  cp -af $INSTALLER/common/post-fs.sh $MODPATH/post-fs-data.sh
-fi
-
 # post-fs-data mode scripts
-if (! $CACHEMOD) && ($POSTFSDATA); then
+if ($POSTFSDATA); then
   cp -af $INSTALLER/common/post-fs-data.sh $MODPATH/post-fs-data.sh
 fi
 
 # service mode scripts
-if (! $CACHEMOD) && ($LATESTARTSERVICE); then
+if ($LATESTARTSERVICE); then
   cp -af $INSTALLER/common/service.sh $MODPATH/service.sh
 fi
 
@@ -356,18 +343,8 @@ set_permissions
 
 # Android 5.1 dirty workaround
 if [ "$API" -eq "22" ]; then
-  ui_print "- Android 5.1 workaround"
-  find /system -type f -name '*.odex*' 2>/dev/null | while read ODEX; do
-    # Replace the folder
-    mktouch $HELPERPATH${ODEX%/*}/.replace
-    # Create a dummy for renaming
-    mktouch "$HELPERPATH$ODEX".xposed
-  done
-  find /system/framework -type f -name 'boot.*' 2>/dev/null | while read BOOT; do
-    mktouch $HELPERPATH$BOOT
-  done
-  # Enable auto_mount
-  touch $HELPERPATH/auto_mount
+  ui_print "- Installing Xposed Helper for Android 5.1"
+  mkdir -p $HELPERPATH
   cp -af $INSTALLER/common/helper.sh $HELPERPATH/post-fs-data.sh
   cp -af $INSTALLER/common/helper.prop $HELPERPATH/module.prop
   set_perm_recursive  $HELPERPATH  0  0  0755  0644
@@ -375,17 +352,15 @@ fi
 
 ui_print "- Unmounting partitions"
 
-if (! $CACHEMOD); then
-  umount $MOUNTPATH
-  losetup -d $LOOPDEVICE
-  rm -rf $MOUNTPATH
-  # Shrink the image if possible
-  target_size_check $IMG
-  NEWDATASIZE=$(((curUsedM / 32 + 2) * 32));
-  if [ "$curSizeM" -gt "$NEWDATASIZE" ]; then
-    ui_print "- Shrinking $IMG to ${NEWDATASIZE}M...";
-    resize2fs $IMG ${NEWDATASIZE}M;
-  fi
+umount $MOUNTPATH
+losetup -d $LOOPDEVICE
+rm -rf $MOUNTPATH
+# Shrink the image if possible
+target_size_check $IMG
+NEWDATASIZE=$(((curUsedM / 32 + 2) * 32));
+if [ "$curSizeM" -gt "$NEWDATASIZE" ]; then
+  ui_print "- Shrinking $IMG to ${NEWDATASIZE}M...";
+  resize2fs $IMG ${NEWDATASIZE}M;
 fi
 
 if (! $BOOTMODE); then

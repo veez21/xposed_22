@@ -1,12 +1,7 @@
 #!/system/bin/sh
 
+MODDIR=${0%/*}
 LOGFILE=/cache/magisk.log
-
-XPOSEDPATH=/magisk/xposed
-HELPERPATH=/magisk/xposed_helper
-COREDIR=/magisk/.core
-MIRRDIR=$COREDIR/mirror
-
 DISABLE=/data/data/de.robv.android.xposed.installer/conf/disabled
 
 log_print() {
@@ -23,8 +18,8 @@ bind_mount() {
   fi
 }
 
-find $XPOSEDPATH/system -type f 2>/dev/null | while read f; do
-  TARGET=${f#$XPOSEDPATH}
+find $MODDIR/system -type f 2>/dev/null | while read f; do
+  TARGET=${f#$MODDIR}
   bind_mount $f $TARGET
 done
 
