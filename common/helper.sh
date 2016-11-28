@@ -24,17 +24,26 @@ bind_mount() {
   fi
 }
 
+add_list() {
+  [ `grep -c "^$1$" $MODDIR/lists` -eq 0 ] && echo $1 >> $MODDIR/lists
+}
+
 if [ ! -f $DISABLE ]; then
   # Cleanup
-  rm -rf $MODDIR/system 2>/dev/null
+  rm -rf $MODDIR/system $MODDIR/lists 2>/dev/null
+  touch $MODDIR/lists
 
   find /system -type f -name "*.odex*" 2>/dev/null | while read ODEX; do
     mkdir -p $MODDIR${ODEX%/*}
     # Rename the odex files
     ln -s $MIRRDIR$ODEX $MODDIR${ODEX}.xposed
-    bind_mount $MODDIR${ODEX%/*} ${ODEX%/*}
+    add_list ${ODEX%/*}
   done
   find /system/framework -type f -name "boot.*" 2>/dev/null | while read BOOT; do
     ln -s $MIRRDIR$BOOT $MODDIR$BOOT 2>/dev/null
+  done
+
+  cat $MODDIR/lists | while read ITEM ; do
+    bind_mount $MODDIR$ITEM $ITEM
   done
 fi

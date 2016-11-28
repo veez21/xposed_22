@@ -1,8 +1,7 @@
-v87.0 (Systemless by topjohnwu)
-    - Include fix from rovo89 to
-      prevent bootloops in the 
-      latest security patch
-    - Android 5.1 (SDK 22) was 
-      broken after one Magisk 
-      upgrade, it's now Magisk
-      version independent
+v87.1 (Systemless by topjohnwu)
+    - Include fix from wanam to
+      fix Note 5 UX roms
+    - Update ART libs
+    - Properly fixed Android 5.1
+      (Fully tested)
+
