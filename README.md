@@ -3,7 +3,8 @@
 This is a port of rovo89's Xposed framework to work systemless-ly through Magisk
 
 ## Changelog
-####v87.1 (Systemless by topjohnwu)
+#### Template v3 upgrade!
+#### v87.1 (Systemless by topjohnwu)
 - Include fix from wanam to fix Note 5 UX roms
 - Update ART libs
 - Properly fixed Android 5.1 (Fully tested)
